@@ -12,7 +12,11 @@ app = FastAPI()
 # Allow requests from your frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://vocabstream.vercel.app"],
+    allow_origins=[
+        "https://vocabstream.vercel.app",  # production frontend
+        "http://localhost:3000",           # local frontend (Vite dev)
+        "https://vocabstream-for-testing.vercel.app"            # test frontend
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
