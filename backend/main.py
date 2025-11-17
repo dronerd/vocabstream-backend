@@ -26,12 +26,6 @@ app.add_middleware(
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Legacy request model for backward compatibility
-class ChatRequest(BaseModel):
-    message: str
-    level: str
-    specialty: str
-
 # New request models for casual and lesson modes
 class ComponentTiming(BaseModel):
     component: str
@@ -297,23 +291,6 @@ async def handle_lesson_chat(req: dict):
         
     except Exception as e:
         return {"error": str(e), "mode": "lesson"}
-
-# Keep legacy endpoint for backward compatibility
-@app.post("/api/chat-legacy")
-async def chat_legacy(req: ChatRequest):
-    """Legacy endpoint for old request format"""
-    try:
-        completion = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": f"You are an English conversation partner focusing on {req.specialty} at level {req.level}."},
-                {"role": "user", "content": req.message},
-            ],
-        )
-        reply = completion.choices[0].message.content
-        return {"reply": reply}
-    except Exception as e:
-        return {"error": str(e)}
 
 @app.get("/")
 def root():
