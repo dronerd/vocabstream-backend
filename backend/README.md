@@ -123,8 +123,6 @@ Add your OPENAI_API_KEY in Environment Variables
 
 Click Deploy Blueprint
 
-After a few minutes, you’ll get a URL like:
-
 https://vocabstream-backend.onrender.com
 
 🔗 Connecting to Frontend

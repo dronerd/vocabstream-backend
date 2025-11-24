@@ -233,7 +233,6 @@ async def handle_casual_chat(req: dict):
             temperature=0.7,
             max_tokens=500,
         )
-        
         reply = completion.choices[0].message.content
         return {"reply": reply, "mode": "casual"}
         
