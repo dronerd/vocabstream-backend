@@ -1,11 +1,13 @@
 # main.py
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
 from typing import Optional, List
+import io
 
 load_dotenv()
 app = FastAPI()
@@ -295,3 +297,56 @@ async def handle_lesson_chat(req: dict):
 @app.get("/")
 def root():
     return {"status": "ok", "version": "2.0", "modes": ["casual", "lesson"]}
+
+
+@app.post("/api/voice")
+async def voice(req: dict):
+    """Generate speech audio for given text.
+
+    Expects JSON: { "text": "...", "voice": "alloy" }
+
+    Tries to use the configured OpenAI client to synthesize TTS. Returns audio binary (audio/mpeg).
+    If OpenAI TTS API is unavailable or an error occurs, returns a JSON error response.
+    """
+    try:
+        text = req.get("text", "")
+        voice = req.get("voice", "alloy")
+        if not text:
+            return JSONResponse({"error": "No text provided"}, status_code=400)
+
+        # Attempt to call OpenAI TTS (SDK may expose audio generation differently depending on version).
+        # This code attempts a best-effort call using the OpenAI Python client wrapper used elsewhere.
+        try:
+            # Many OpenAI SDKs provide an `audio.speech.create` or similar method for TTS.
+            # We call it and attempt to extract raw bytes from the response.
+            resp = client.audio.speech.create(model="gpt-4o-mini-tts", voice=voice, input=text)
+
+            # resp may be a bytes-like object, or have attributes/stream. Try common access patterns.
+            audio_bytes = None
+            if isinstance(resp, (bytes, bytearray)):
+                audio_bytes = bytes(resp)
+            else:
+                # Try common attributes
+                for attr in ("audio", "data", "content", "raw", "raw_audio"):
+                    if hasattr(resp, attr):
+                        candidate = getattr(resp, attr)
+                        if isinstance(candidate, (bytes, bytearray)):
+                            audio_bytes = bytes(candidate)
+                            break
+                        # file-like
+                        if hasattr(candidate, "read"):
+                            audio_bytes = candidate.read()
+                            break
+
+            if audio_bytes is None:
+                # As a last resort, try to stringify the response (not ideal)
+                return JSONResponse({"error": "Could not extract audio bytes from OpenAI response", "raw": str(resp)}, status_code=500)
+
+            return StreamingResponse(io.BytesIO(audio_bytes), media_type="audio/mpeg")
+
+        except Exception as inner_e:
+            # If OpenAI TTS is not configured or call fails, return error
+            return JSONResponse({"error": "OpenAI TTS error", "details": str(inner_e)}, status_code=500)
+
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
