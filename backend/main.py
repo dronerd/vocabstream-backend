@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Response
 from pydantic import BaseModel
 from openai import OpenAI
 import os
@@ -299,9 +300,10 @@ def root():
 
 # this is for UptimeRobot or similar services to check server health
 # this enables the backend on Render to stay awake
-@app.get("/health")
+# use GET or HEAD method to enable UptimeRobot compatibility
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
-    return {"status": "ok"}
+    return Response(status_code=200)
 
 
 
