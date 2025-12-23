@@ -297,6 +297,13 @@ async def handle_lesson_chat(req: dict):
 def root():
     return {"status": "ok", "version": "2.0", "modes": ["casual", "lesson"]}
 
+# this is for UptimeRobot or similar services to check server health
+# this enables the backend on Render to stay awake
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 
 @app.post("/api/voice")
 async def voice(req: dict):
