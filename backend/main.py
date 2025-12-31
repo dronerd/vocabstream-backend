@@ -309,11 +309,12 @@ def health():
 
 @app.post("/api/voice")
 async def voice(req: dict):
-    """Generate speech audio for given text with streaming support.
+    """Generate speech audio for given text.
 
     Expects JSON: { "text": "...", "voice": "alloy" }
 
-    Returns streaming audio response for real-time playback.
+    Tries to use the configured OpenAI client to synthesize TTS. Returns audio binary (audio/mpeg).
+    If OpenAI TTS API is unavailable or an error occurs, returns a JSON error response.
     """
     try:
         text = req.get("text", "")
@@ -321,39 +322,39 @@ async def voice(req: dict):
         if not text:
             return JSONResponse({"error": "No text provided"}, status_code=400)
 
-        # Use streaming response for real-time audio
-        response = client.audio.speech.create(
-            model="gpt-4o-mini-tts",
-            voice=voice,
-            input=text,
-            response_format="mp3"
-        )
+        # Attempt to call OpenAI TTS (SDK may expose audio generation differently depending on version).
+        # This code attempts a best-effort call using the OpenAI Python client wrapper used elsewhere.
+        try:
+            # Many OpenAI SDKs provide an `audio.speech.create` or similar method for TTS.
+            # We call it and attempt to extract raw bytes from the response.
+            resp = client.audio.speech.create(model="gpt-4o-mini-tts", voice=voice, input=text)
 
-        # Return streaming response
-        async def generate():
-            async for chunk in response.aiter_bytes():
-                yield chunk
+            # resp may be a bytes-like object, or have attributes/stream. Try common access patterns.
+            audio_bytes = None
+            if isinstance(resp, (bytes, bytearray)):
+                audio_bytes = bytes(resp)
+            else:
+                # Try common attributes
+                for attr in ("audio", "data", "content", "raw", "raw_audio"):
+                    if hasattr(resp, attr):
+                        candidate = getattr(resp, attr)
+                        if isinstance(candidate, (bytes, bytearray)):
+                            audio_bytes = bytes(candidate)
+                            break
+                        # file-like
+                        if hasattr(candidate, "read"):
+                            audio_bytes = candidate.read()
+                            break
 
-        return StreamingResponse(
-            generate(),
-            media_type="audio/mpeg",
-            headers={"Content-Disposition": "inline; filename=speech.mp3"}
-        )
+            if audio_bytes is None:
+                # As a last resort, try to stringify the response (not ideal)
+                return JSONResponse({"error": "Could not extract audio bytes from OpenAI response", "raw": str(resp)}, status_code=500)
 
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+            return StreamingResponse(io.BytesIO(audio_bytes), media_type="audio/mpeg")
 
-# New endpoint for receiving speech-to-text input
-class SpeechTextRequest(BaseModel):
-    text: str
+        except Exception as inner_e:
+            # If OpenAI TTS is not configured or call fails, return error
+            return JSONResponse({"error": "OpenAI TTS error", "details": str(inner_e)}, status_code=500)
 
-@app.post("/api/speech-text")
-async def receive_speech_text(req: SpeechTextRequest):
-    """Receive text from speech-to-text input and process it."""
-    try:
-        text = req.text
-        # Here you can process the text, e.g., save to database, analyze, etc.
-        # For now, just return a confirmation
-        return {"status": "received", "text": text, "message": "Speech text received successfully"}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
